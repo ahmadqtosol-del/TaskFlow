@@ -1,45 +1,21 @@
-# =====================
-# Python Backend
-# =====================
-backend/.venv/
-backend/__pycache__/
-backend/**/*.pyc
+# Uploaded user files
+backend/uploads/
+
+# Python
+__pycache__/
 *.pyc
 
-# Environment variables
-.env
-backend/.env
+# Virtual environment
+.venv/
 
-
-# =====================
-# React Frontend
-# =====================
-frontend/node_modules/
-frontend/dist/
-
-# Root node modules
+# Node
 node_modules/
+dist/
 
+# Environment files
+.env
+.env.*
 
-# =====================
-# Database
-# =====================
+# Database files
 *.db
-*.sqlite
-
-
-# =====================
-# IDE
-# =====================
-.vscode/
-.idea/
-
-
-# =====================
-# OS
-# =====================
-.DS_Store
-Thumbs.db
-
-# User uploaded files
-backend/uploads/
+*.sqlite3
