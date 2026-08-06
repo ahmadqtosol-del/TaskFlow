@@ -1,0 +1,42 @@
+# =====================
+# Python Backend
+# =====================
+backend/.venv/
+backend/__pycache__/
+backend/**/*.pyc
+*.pyc
+
+# Environment variables
+.env
+backend/.env
+
+
+# =====================
+# React Frontend
+# =====================
+frontend/node_modules/
+frontend/dist/
+
+# Root node modules
+node_modules/
+
+
+# =====================
+# Database
+# =====================
+*.db
+*.sqlite
+
+
+# =====================
+# IDE
+# =====================
+.vscode/
+.idea/
+
+
+# =====================
+# OS
+# =====================
+.DS_Store
+Thumbs.db

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-multipart
+firebase-admin  # If you need admin SDK
+email-validator
+pydantic[email]
