@@ -406,8 +406,9 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fronten
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
-    if __name__ == "__main__":
-   
+
+if __name__ == "__main__":
+    import uvicorn
 
     uvicorn.run(
         "backend.main:app",
