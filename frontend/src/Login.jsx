@@ -18,8 +18,6 @@ async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const API_URL = "http://se-mlm-01.velrix.net:4050/api";
-
 const API_URL = "http://se-mlm-01.velrix.net:4050/api";
 
 const res = await fetch(`${API_URL}${path}`, {

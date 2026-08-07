@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import KanbanBoard from './components/KanbanBoard';
-
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 const STATUS_ORDER = ['To Do', 'In Progress', 'In Review', 'Completed'];
 const NAV_ITEMS = [
@@ -44,17 +44,34 @@ const departmentEmojis = {
   'Finance': '💰',
 };
 
-async function api(path, options = {}) {
+
+  async function api(path, options = {}) {
+
   const headers = new Headers(options.headers || {});
-  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
+
+  if (
+    options.body &&
+    !(options.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`/api${path}`, { ...options, headers });
+
+  const res = await fetch(`${API_URL}/api${path}`, {
+    ...options,
+    headers,
+  });
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Request failed' }));
-    throw new Error(err.detail || 'Request failed');
+    const err = await res.json().catch(() => ({
+      detail: "Request failed"
+    }));
+
+    throw new Error(err.detail || "Request failed");
   }
+
   if (res.status === 204) return null;
+
   return res.json();
 }
 
