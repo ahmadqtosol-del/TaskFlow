@@ -19,7 +19,6 @@ async function api(path, options = {}) {
   }
 
 const API_URL = "https://rogers-telecom-bacteria-whose.trycloudflare.com/api";
-
 const res = await fetch(`${API_URL}${path}`, {
   ...options,
   headers,
