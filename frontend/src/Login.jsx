@@ -149,7 +149,7 @@ function Login({ onLogin }) {
       <div className="login-card glass-card">
         <div className="login-header">
           <div className="brand-icon">◫</div>
-          <h1>TaskFlow</h1>
+          <h1>QTO.sol</h1>
           <p className="login-subtitle">Task Management System</p>
         </div>
 

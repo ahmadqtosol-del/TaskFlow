@@ -147,7 +147,7 @@ function App({ user, onLogout }) {
       });
 
       await loadAll();
-      showToast('Welcome to TaskFlow! 🎉');
+      showToast('Welcome to QTO.SOL! 🎉');
     } catch (error) {
       console.error('Error creating user:', error);
       showToast('Error setting up account.');
@@ -655,8 +655,7 @@ useEffect(() => {
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-icon">◫</div>
-          <div className="brand-word">TaskFlow</div>
-          <span className="brand-badge">Pro</span>
+          <div className="brand-word">QTO.SOL</div>
         </div>
 
         <div className="active-user-wrap">

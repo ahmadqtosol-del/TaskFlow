@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-
+import uvicorn
 import models
 import schemas
 import crud
@@ -405,3 +405,12 @@ def update_settings(settings: schemas.SettingsUpdate, db: Session = Depends(get_
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+    if __name__ == "__main__":
+   
+
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=8000
+    )
