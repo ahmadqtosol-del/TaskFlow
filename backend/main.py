@@ -123,17 +123,16 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="TaskFlow API")
 
-origins=[
-  "http://localhost:5173",
-    "https://taskflow-8qm.pages.dev"
-]
-
 app.add_middleware(
-CORSMiddleware,
-allow_origins=origins,
-allow_credentials=True,
-allow_methods=["*"],
-allow_headers=["*"],
+    CORSMiddleware,
+    allow_origin_regex=r"https://.*\.taskflow-8qm\.pages\.dev",
+    allow_origins=[
+        "http://localhost:5173",
+        "https://taskflow-8qm.pages.dev",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 # ================= FIREBASE SYNC SCHEMA =================
 
