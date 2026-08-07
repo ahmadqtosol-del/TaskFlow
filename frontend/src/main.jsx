@@ -24,10 +24,12 @@ async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`/api${path}`, {
-    ...options,
-    headers,
-  });
+ const API_URL = "http://se-mlm-01.velrix.net:4050/api";
+
+const res = await fetch(`${API_URL}${path}`, {
+  ...options,
+  headers,
+});
 
   if (!response.ok) {
     const error = await response
@@ -372,13 +374,6 @@ function Main() {
     );
 
   }
-
-
-
-
-
-
-
   // Error screen
   if(authError){
 
@@ -412,8 +407,6 @@ function Main() {
             Try Again
 
           </button>
-
-
         </div>
 
       </div>
@@ -476,3 +469,4 @@ ReactDOM
   </React.StrictMode>
 
 );
+

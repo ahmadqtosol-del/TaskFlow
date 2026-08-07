@@ -15,7 +15,7 @@ import models
 import schemas
 import crud
 from database import engine, get_db, Base
-
+from fastapi.middleware.cors import CORSMiddleware
 DB_PATH = os.path.join(os.path.dirname(__file__), "tasks.db")
 
 
@@ -123,12 +123,17 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(title="TaskFlow API")
 
+origins=[
+"https://ce2fe27b.taskflow-8qm.pages.dev",
+"http://localhost:5173"
+]
+
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+CORSMiddleware,
+allow_origins=origins,
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
 )
 # ================= FIREBASE SYNC SCHEMA =================
 
