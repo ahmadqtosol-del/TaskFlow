@@ -124,8 +124,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI(title="TaskFlow API")
 
 origins=[
-"https://ce2fe27b.taskflow-8qm.pages.dev",
-"http://localhost:5173"
+  "http://localhost:5173",
+    "https://taskflow-8qm.pages.dev"
 ]
 
 app.add_middleware(
