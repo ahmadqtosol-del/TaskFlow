@@ -46,7 +46,6 @@ const departmentEmojis = {
 
 
   async function api(path, options = {}) {
-
   const headers = new Headers(options.headers || {});
 
   if (
