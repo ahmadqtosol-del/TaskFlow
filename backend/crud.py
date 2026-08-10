@@ -35,7 +35,11 @@ def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
 
-def get_or_create_user_by_email(db: Session, email: str, name: str = None):
+def get_or_create_user_by_email(
+    db: Session,
+    email: str,
+    name: Optional[str] = None
+):
     """Get a user by email, or create one if they don't exist"""
     if not email:
         return None

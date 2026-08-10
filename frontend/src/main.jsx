@@ -25,7 +25,7 @@ async function api(path, options = {}) {
   }
 
   const API_URL =
-    "https://rogers-telecom-bacteria-whose.trycloudflare.com/api";
+    "https://store-once-plots-exceptions.trycloudflare.com/api";
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,

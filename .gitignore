@@ -1,12 +1,14 @@
-# Uploaded user files
+# Uploaded files
 backend/uploads/
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
 
 # Virtual environment
 .venv/
+venv/
 
 # Node
 node_modules/
@@ -15,6 +17,7 @@ dist/
 # Environment files
 .env
 .env.*
+.env.production
 
 # Database files
 *.db

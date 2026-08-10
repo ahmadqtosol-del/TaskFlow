@@ -97,7 +97,7 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     project_id: int
-    assignee_ids: List[int] = []
+    assignee_ids: List[int] = Field(default_factory=list)
 
 
 class TaskUpdate(BaseModel):
