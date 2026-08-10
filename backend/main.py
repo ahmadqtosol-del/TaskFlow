@@ -10,12 +10,31 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-import uvicorn
+
 import models
 import schemas
 import crud
 from database import engine, get_db, Base
+import os
+import shutil
+import uuid
+import sqlite3
+from datetime import datetime
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from pydantic import BaseModel
+
+import models
+import schemas
+import crud
+from database import engine, get_db, Base
+
+from email_service import send_welcome_email, send_task_assignment_email
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "tasks.db")
 
 
@@ -125,20 +144,14 @@ app = FastAPI(title="TaskFlow API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.taskflow-8qm\.pages\.dev",
-    allow_origins=[
-        "http://localhost:5173",
-        "https://taskflow-8qm.pages.dev",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 # ================= FIREBASE SYNC SCHEMA =================
 
-class FirebaseUserSync(BaseModel):
-    email: str
-    name: Optional[str] = None
+
 
 # =========================================================
 
@@ -170,7 +183,6 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-
 @app.post("/api/users/sync-firebase")
 def sync_firebase_user(
     user_data: FirebaseUserSync,
@@ -179,13 +191,25 @@ def sync_firebase_user(
     """
     Sync a Firebase user with the database.
     Creates user if they don't exist.
+    Sends a welcome email only for a newly created user.
     """
 
+    # Check whether the user already exists
+    existing_user = crud.get_user_by_email(db, user_data.email)
+
+    # Create the user if they don't exist
     user = crud.get_or_create_user_by_email(
         db,
         user_data.email,
         user_data.name
     )
+
+    # Send welcome email ONLY for a new user
+    if existing_user is None:
+        send_welcome_email(
+            user_email=user_data.email,
+            user_name=user_data.name
+        )
 
     return user
 # ==============================================================
@@ -255,10 +279,37 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+@app.post(
+    "/api/tasks",
+    response_model=schemas.TaskOut,
+    status_code=status.HTTP_201_CREATED
+)
+def create_task(
+    task: schemas.TaskCreate,
+    db: Session = Depends(get_db)
+):
+    # Create the task in the database
+    db_task = crud.create_task(db, task)
 
-@app.post("/api/tasks", response_model=schemas.TaskOut, status_code=status.HTTP_201_CREATED)
-def create_task(task: schemas.TaskCreate, db: Session = Depends(get_db)):
-    return crud.create_task(db, task)
+    # Send email to every assigned user
+    for assignee in db_task.assignees:
+
+        # Only send if the user has an email
+        if assignee.email:
+
+            send_task_assignment_email(
+                user_email=assignee.email,
+                user_name=assignee.name,
+                task_title=db_task.title,
+                description=db_task.description,
+                priority=db_task.priority,
+                task_status=db_task.status,
+                start_date=db_task.start_date,
+                due_date=db_task.due_date
+            )
+
+    return db_task
+
 
 
 @app.put("/api/tasks/{task_id}", response_model=schemas.TaskOut)
@@ -409,13 +460,3 @@ def update_settings(settings: schemas.SettingsUpdate, db: Session = Depends(get_
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=4050
-    )
