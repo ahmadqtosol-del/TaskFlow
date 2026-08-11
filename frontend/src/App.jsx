@@ -96,6 +96,7 @@ function App({ user, onLogout }) {
   const [toast, setToast] = useState('');
   const [editingDepartment, setEditingDepartment] = useState(null);
   const [viewMode, setViewMode] = useState('board'); // 'board' or 'kanban'
+  const [newMemberEmail, setNewMemberEmail] = useState(''); // Added for email field
 
   const scheduleLoadedRef = useRef(false);
   const initialLoadDone = useRef(false);
@@ -320,57 +321,36 @@ function App({ user, onLogout }) {
     }
   }
 
-  
-
+  // 👇 Theme effect
   useEffect(() => {
-    if (activeView === 'dashboard') {
-      Promise.all([api('/stats'), api('/projects')]).then(([statsData, projectsData]) => {
-        setStats(statsData);
-        setProjects(projectsData);
-      }).catch(console.error);
+    document.documentElement.classList.toggle(
+      "dark",
+      settings.theme === "dark"
+    );
+  }, [settings.theme]);
+
+  // 👇 Default view effect - applies only when settings change
+  useEffect(() => {
+    if (!settings.default_view) return;
+
+    switch (settings.default_view) {
+      case "board":
+        setActiveView("project");
+        setViewMode("board");
+        break;
+
+      case "list":
+        setActiveView("mytasks");
+        break;
+
+      case "calendar":
+        setActiveView("schedule");
+        break;
+
+      default:
+        setActiveView("dashboard");
     }
-  }, [activeView]);
-
-
-  useEffect(() => {
-  if (activeView === 'dashboard') {
-    Promise.all([api('/stats'), api('/projects')]).then(([statsData, projectsData]) => {
-      setStats(statsData);
-      setProjects(projectsData);
-    }).catch(console.error);
-  }
-}, [activeView]);
-
-// 👇 Theme effect
-useEffect(() => {
-  document.documentElement.classList.toggle(
-    "dark",
-    settings.theme === "dark"
-  );
-}, [settings.theme]);
-
-// 👇 Default view effect - applies only when settings change
-useEffect(() => {
-  if (!settings.default_view) return;
-
-  switch (settings.default_view) {
-    case "board":
-      setActiveView("project");
-      setViewMode("board");
-      break;
-
-    case "list":
-      setActiveView("mytasks");
-      break;
-
-    case "calendar":
-      setActiveView("schedule");
-      break;
-
-    default:
-      setActiveView("dashboard");
-  }
-}, [settings.default_view]);
+  }, [settings.default_view]);
 
   // Handle status change for Kanban with API persistence & state sync
   const handleStatusChange = async (taskId, newStatus) => {
@@ -473,7 +453,7 @@ useEffect(() => {
       });
       showToast('Task assigned successfully! 🎉');
       closeAllDialogs();
-      await loadTasks(selectedProjectId);
+      await loadTasks(projectId); // FIXED: Changed from selectedProjectId to projectId
       if (activeUserId) await loadNotifications(activeUserId);
       await loadActivities();
       const statsData = await api('/stats');
@@ -540,6 +520,7 @@ useEffect(() => {
     const initials = form.get('initials')?.toString().trim().toUpperCase() || (name ? name.substring(0, 2).toUpperCase() : 'U');
     const color = form.get('color') || '#6366F1';
     const emoji = form.get('emoji') || '👤';
+    const email = form.get('email')?.toString().trim(); // Get email from form
 
     if (!name) {
       showToast('Please enter a member name');
@@ -551,13 +532,19 @@ useEffect(() => {
       return;
     }
 
+    if (!email) {
+      showToast('Please enter an email address');
+      return;
+    }
+
     try {
       const newUser = {
         name: name,
         initials: initials,
         department: department,
         color: color,
-        emoji: emoji
+        emoji: emoji,
+        email: email // Include email in the request
       };
 
       await api('/users', {
@@ -567,6 +554,7 @@ useEffect(() => {
 
       showToast(`Member "${name}" added successfully! 🎉`);
       closeAllDialogs();
+      setNewMemberEmail(''); // Reset email field after successful creation
       await loadAll();
     } catch (error) {
       showToast('Error adding member: ' + error.message);
@@ -1173,6 +1161,17 @@ useEffect(() => {
                 <label>Full Name *</label>
                 <input name="name" placeholder="e.g. Alex Morgan" required />
               </div>
+              <div className="form-group full">
+                <label>Email *</label>
+                <input 
+                  type="email" 
+                  name="email" 
+                  placeholder="member@example.com" 
+                  required 
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                />
+              </div>
               <div className="form-group">
                 <label>Initials</label>
                 <input name="initials" placeholder="e.g. AM" maxLength={3} />
@@ -1332,7 +1331,7 @@ useEffect(() => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {dialogState.payload.attachments?.map((attachment) => (
                   <div key={attachment.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                    <a href={`/api/attachments/${attachment.id}/download`} target="_blank" rel="noreferrer" download style={{ color: 'var(--accent-primary)', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}>
+                    <a href={`${API_URL}/api/attachments/${attachment.id}/download`} target="_blank" rel="noreferrer" download style={{ color: 'var(--accent-primary)', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}>
                       📄 {attachment.filename}
                     </a>
                     <button type="button" className="icon-btn danger" onClick={() => deleteAttachment(attachment.id)}>✕</button>
