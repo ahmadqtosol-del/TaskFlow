@@ -18,7 +18,7 @@ async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-const API_URL = "https://store-once-plots-exceptions.trycloudflare.com/api";
+const API_URL = "https://gamecube-liberty-port-teddy.trycloudflare.com/api";
 const res = await fetch(`${API_URL}${path}`, {
   ...options,
   headers,

@@ -25,7 +25,7 @@ async function api(path, options = {}) {
   }
 
   const API_URL =
-    "https://store-once-plots-exceptions.trycloudflare.com/api";
+    "https://gamecube-liberty-port-teddy.trycloudflare.com/api";
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
