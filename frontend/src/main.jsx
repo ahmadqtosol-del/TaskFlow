@@ -24,8 +24,7 @@ async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const API_URL =
-    "https://gamecube-liberty-port-teddy.trycloudflare.com/api";
+  const API_URL ="https://gamecube-liberty-port-teddy.trycloudflare.com/api";
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
