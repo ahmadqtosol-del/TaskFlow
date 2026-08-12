@@ -22,7 +22,7 @@ const API_BASE = configuredApiUrl
       window.location.hostname === '127.0.0.1' ||
       /^10\./.test(window.location.hostname)
         ? 'http://localhost:8000'
-        : 'https://gamecube-liberty-port-teddy.trycloudflare.com'
+        : 'https://weighted-comfort-supplemental-termination.trycloudflare.com'
     );
 
 const API_URL = `${API_BASE}/api`;
