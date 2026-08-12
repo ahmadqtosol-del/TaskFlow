@@ -10,10 +10,30 @@ class UserBase(BaseModel):
     color: Optional[str] = "#6366F1"
     department: Optional[str] = None
     emoji: Optional[str] = None
-    # ========== ADDED: Email field ==========
-    email: Optional[EmailStr] = None  # EmailStr validates email format
+    email: Optional[EmailStr] = None
+    workspace_id: Optional[int] = None  # EmailStr validates email format
     # ========================================
+# ---------- Workspace ----------
 
+class WorkspaceBase(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+
+class WorkspaceCreate(WorkspaceBase):
+    pass
+
+
+class WorkspaceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class WorkspaceOut(WorkspaceBase):
+    id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 class UserCreate(UserBase):
     pass
@@ -21,6 +41,7 @@ class UserCreate(UserBase):
 
 class UserOut(UserBase):
     id: int
+
     model_config = {"from_attributes": True}
 
 
@@ -28,6 +49,7 @@ class UserOut(UserBase):
 class FirebaseUserSync(BaseModel):
     email: EmailStr
     name: Optional[str] = None
+    workspace_id: Optional[int] = None
     firebase_uid: Optional[str] = None  # For future use
 
 
@@ -148,7 +170,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    workspace_id: int
 
 
 class ProjectUpdate(BaseModel):
@@ -158,9 +180,11 @@ class ProjectUpdate(BaseModel):
 
 class ProjectOut(ProjectBase):
     id: int
+    workspace_id: int
     created_at: datetime
     task_count: int = 0
     completed_count: int = 0
+
     model_config = {"from_attributes": True}
 
 
@@ -194,17 +218,18 @@ class ActivityOut(BaseModel):
 # ---------- Settings ----------
 class SettingsOut(BaseModel):
     id: int
+    workspace_id: int
     workspace_name: str
     default_view: str
     theme: str
+
     model_config = {"from_attributes": True}
 
-
 class SettingsUpdate(BaseModel):
+    workspace_id: Optional[int] = None
     workspace_name: Optional[str] = None
     default_view: Optional[str] = None
     theme: Optional[str] = None
-
 
 # ========== ADDED: Auth Response Schemas ==========
 class AuthResponse(BaseModel):

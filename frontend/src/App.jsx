@@ -1,6 +1,86 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import KanbanBoard from './components/KanbanBoard';
-const API_URL = import.meta.env.VITE_API_URL || "";
+
+// ============================================================
+// BACKEND API URL
+// ============================================================
+// VITE_API_URL may be either:
+//   http://localhost:8000
+//   http://localhost:8000/api
+//   https://YOUR-TUNNEL.trycloudflare.com
+//   https://YOUR-TUNNEL.trycloudflare.com/api
+//
+// If VITE_API_URL is not set, automatically use localhost during
+// local development and the current tunnel URL for a deployed app.
+// ============================================================
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+
+const API_BASE = configuredApiUrl
+  ? configuredApiUrl.replace(/\/api$/i, '')
+  : (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      /^10\./.test(window.location.hostname)
+        ? 'http://localhost:8000'
+        : 'https://gamecube-liberty-port-teddy.trycloudflare.com'
+    );
+
+const API_URL = `${API_BASE}/api`;
+
+console.log('🌐 App API URL:', API_URL);
+
+async function api(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+
+  if (
+    options.body &&
+    !(options.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+  const url = `${API_URL}${cleanPath}`;
+
+  console.log("🌐 API Request:", options.method || "GET", url);
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+
+  if (!res.ok) {
+    let errorMessage = `Request failed (${res.status})`;
+
+    if (contentType.includes("application/json")) {
+      const err = await res.json().catch(() => null);
+      errorMessage = err?.detail || errorMessage;
+    } else {
+      const text = await res.text().catch(() => "");
+      if (text) {
+        errorMessage = text.substring(0, 200);
+      }
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  if (res.status === 204) {
+    return null;
+  }
+
+  if (!contentType.includes("application/json")) {
+    const text = await res.text();
+    console.warn("⚠️ API returned non-JSON response:", text);
+    return text;
+  }
+
+  return res.json();
+}
 
 const STATUS_ORDER = ['To Do', 'In Progress', 'In Review', 'Completed'];
 const NAV_ITEMS = [
@@ -44,45 +124,19 @@ const departmentEmojis = {
   'Finance': '💰',
 };
 
-
-  async function api(path, options = {}) {
-  const headers = new Headers(options.headers || {});
-
-  if (
-    options.body &&
-    !(options.body instanceof FormData) &&
-    !headers.has("Content-Type")
-  ) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const res = await fetch(`${API_URL}/api${path}`, {
-    ...options,
-    headers,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({
-      detail: "Request failed"
-    }));
-
-    throw new Error(err.detail || "Request failed");
-  }
-
-  if (res.status === 204) return null;
-
-  return res.json();
-}
-
 function App({ user, onLogout }) {
   const [activeView, setActiveView] = useState('dashboard');
+  // ========== ADDED: Workspace states ==========
+  const [workspaces, setWorkspaces] = useState([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+  // ============================================
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState({ total: 0, todo: 0, in_progress: 0, in_review: 0, completed: 0, project_count: 0 });
   const [notifications, setNotifications] = useState([]);
   const [activity, setActivity] = useState([]);
-  const [settings, setSettings] = useState({ workspace_name: 'TaskFlow', default_view: null, theme: 'light' });
+  const [settings, setSettings] = useState({ workspace_name: 'TaskFlow', default_view: 'board', theme: 'light' });
   const [activeUserId, setActiveUserId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [dialogState, setDialogState] = useState({ type: null, payload: null });
@@ -95,11 +149,13 @@ function App({ user, onLogout }) {
   const [scheduleTasks, setScheduleTasks] = useState([]);
   const [toast, setToast] = useState('');
   const [editingDepartment, setEditingDepartment] = useState(null);
-  const [viewMode, setViewMode] = useState('board'); // 'board' or 'kanban'
-  const [newMemberEmail, setNewMemberEmail] = useState(''); // Added for email field
+  const [viewMode, setViewMode] = useState('board');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
 
   const scheduleLoadedRef = useRef(false);
   const initialLoadDone = useRef(false);
+  // ========== ADDED: Ref to track if workspaces are loaded ==========
+  const workspacesLoadedRef = useRef(false);
 
   const activeUser = users.find((u) => u.id === activeUserId) || users[0] || null;
 
@@ -134,7 +190,103 @@ function App({ user, onLogout }) {
     return statsObj;
   }, [departmentList, users, tasks]);
 
-  // Sync Firebase user with database
+  // ========== ADDED: Load workspaces function ==========
+  const loadWorkspaces = async () => {
+    try {
+      const data = await api("/workspaces");
+      setWorkspaces(data);
+
+      if (data.length > 0) {
+        const savedWorkspace = localStorage.getItem("activeWorkspaceId");
+        const workspaceExists = data.some(
+          w => String(w.id) === String(savedWorkspace)
+        );
+
+        if (workspaceExists) {
+          setActiveWorkspaceId(Number(savedWorkspace));
+        } else {
+          setActiveWorkspaceId(data[0].id);
+        }
+        workspacesLoadedRef.current = true;
+      }
+    } catch (error) {
+      console.error("Failed to load workspaces:", error);
+      showToast("Error loading workspaces");
+    }
+  };
+
+  // ========== ADDED: Save workspace to localStorage ==========
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      localStorage.setItem("activeWorkspaceId", String(activeWorkspaceId));
+    }
+  }, [activeWorkspaceId]);
+
+  // ========== ADDED: Load projects for active workspace ==========
+  const loadProjects = async () => {
+    if (!activeWorkspaceId) return;
+
+    try {
+      const data = await api(`/projects?workspace_id=${activeWorkspaceId}`);
+      setProjects(data);
+
+      if (data.length > 0) {
+        const projectExists = data.some(p => p.id === selectedProjectId);
+        if (!projectExists) {
+          setSelectedProjectId(data[0].id);
+          await loadTasks(data[0].id);
+        } else {
+          await loadTasks(selectedProjectId);
+        }
+      } else {
+        setSelectedProjectId(null);
+        setTasks([]);
+      }
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+      showToast("Error loading projects");
+    }
+  };
+
+  // ========== ADDED: Load stats for active workspace ==========
+  const loadStats = async () => {
+    if (!activeWorkspaceId) return;
+
+    try {
+      const statsData = await api(`/stats?workspace_id=${activeWorkspaceId}`);
+      setStats(statsData);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    }
+  };
+
+  // ========== ADDED: Create workspace function ==========
+  const createWorkspace = async (name, description = "") => {
+    try {
+      const workspace = await api(
+        "/workspaces",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            description
+          })
+        }
+      );
+
+      setWorkspaces(prev => [...prev, workspace]);
+      setActiveWorkspaceId(workspace.id);
+      showToast(`Workspace "${name}" created successfully! 🎉`);
+
+      return workspace;
+    } catch (error) {
+      console.error("Failed to create workspace:", error);
+      showToast("Error creating workspace");
+      throw error;
+    }
+  };
+
+  // ========== MODIFIED: Sync Firebase user ==========
   useEffect(() => {
     if (user && users.length > 0) {
       const dbUser = users.find(u => u.email === user.email);
@@ -155,7 +307,8 @@ function App({ user, onLogout }) {
         email: firebaseUser.email,
         department: 'Operations',
         color: '#6366F1',
-        emoji: '👤'
+        emoji: '👤',
+        workspace_id: Number(activeWorkspaceId),
       };
 
       await api('/users', {
@@ -171,62 +324,70 @@ function App({ user, onLogout }) {
     }
   };
 
+  // ========== MODIFIED: Initial load ==========
   useEffect(() => {
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
-      loadAll();
+      loadWorkspaces();
     }
   }, []);
 
+  // ========== ADDED: Load data when workspace changes ==========
   useEffect(() => {
-    if (projects.length > 0 && !selectedProjectId) {
-      const project = projects.find((p) => p.id === selectedProjectId) || projects[0];
-      if (project) {
-        setSelectedProjectId(project.id);
-        loadTasks(project.id);
-      }
+    if (activeWorkspaceId && workspacesLoadedRef.current) {
+      loadProjects();
+      loadStats();
+      loadDepartments();
+      loadActivities();
     }
-  }, [projects]);
+  }, [activeWorkspaceId]);
 
+  // ========== MODIFIED: Load tasks when project changes ==========
   useEffect(() => {
-    if (users.length && !activeUserId) {
-      setActiveUserId(users[0].id);
+    if (selectedProjectId) {
+      loadTasks(selectedProjectId);
     }
-  }, [users, activeUserId]);
+  }, [selectedProjectId]);
 
-  useEffect(() => {
-    if (activeUserId) {
-      loadNotifications(activeUserId);
+  // ========== ADDED: Load departments ==========
+  const loadDepartments = async () => {
+    try {
+      const deptData = await api('/departments');
+      setDepartmentList(deptData.departments || []);
+    } catch (error) {
+      console.error('Error loading departments:', error);
     }
-  }, [activeUserId]);
+  };
 
-  useEffect(() => {
-    if (scheduleRange.start && scheduleRange.end && !scheduleLoadedRef.current) {
-      scheduleLoadedRef.current = true;
-      loadSchedule();
-    }
-  }, [scheduleRange]);
-
+  // ========== MODIFIED: Load all function with workspace_id ==========
   async function loadAll() {
     try {
-      const [allUsers, allProjects, statsData, settingsData, deptData] = await Promise.all([
-        api('/users'),
-        api('/projects'),
-        api('/stats'),
-        api('/settings'),
-        api('/departments'),
+      await loadWorkspaces();
+
+      if (activeWorkspaceId) {
+        await loadProjects();
+        await loadStats();
+        await loadDepartments();
+      }
+
+      const [allUsers, statsData, settingsData] = await Promise.all([
+        // ========== FIXED: Added workspace_id query parameter ==========
+        api(`/users?workspace_id=${activeWorkspaceId}`),
+        // ========== FIXED: Added workspace_id query parameter ==========
+        api(`/stats?workspace_id=${activeWorkspaceId}`),
+        // ========== FIXED: Added workspace_id query parameter ==========
+        api(`/settings?workspace_id=${activeWorkspaceId}`),
       ]);
       setUsers(allUsers);
-      setProjects(allProjects);
       setStats(statsData);
-      setSettings(settingsData);
+      setSettings({
+        workspace_name: settingsData?.workspace_name || 'TaskFlow',
+        default_view: settingsData?.default_view || 'board',
+        theme: settingsData?.theme || 'light',
+        workspace_id: settingsData?.workspace_id ?? activeWorkspaceId ?? null,
+        id: settingsData?.id ?? 1,
+      });
 
-      setDepartmentList(deptData.departments || []);
-
-      if (allProjects[0]) {
-        setSelectedProjectId(allProjects[0].id);
-        await loadTasks(allProjects[0].id);
-      }
       if (allUsers[0]) setActiveUserId(allUsers[0].id);
 
       await loadActivities();
@@ -280,13 +441,43 @@ function App({ user, onLogout }) {
     }
   }
 
+  // ========== FIXED: saveSettings with workspace_id in body (not query) ==========
   async function saveSettings(payload) {
     try {
-      const data = await api('/settings', { method: 'PUT', body: JSON.stringify(payload) });
-      setSettings(data);
-      showToast('Settings saved successfully! ✨');
+      if (!activeWorkspaceId) {
+        showToast("No active workspace selected.");
+        return;
+      }
+
+      const safePayload = {
+        workspace_id: Number(activeWorkspaceId),
+        workspace_name: payload?.workspace_name?.trim() || "TaskFlow",
+        default_view: payload?.default_view || "board",
+        theme: payload?.theme || "light",
+      };
+
+      console.log("⚙️ Saving settings:", safePayload);
+
+      const data = await api("/settings", {
+        method: "PUT",
+        body: JSON.stringify(safePayload),
+      });
+
+      setSettings({
+        id: data?.id ?? settings.id ?? 1,
+        workspace_id: data?.workspace_id ?? safePayload.workspace_id,
+        workspace_name: data?.workspace_name ?? safePayload.workspace_name,
+        default_view: data?.default_view ?? safePayload.default_view,
+        theme: data?.theme ?? safePayload.theme,
+      });
+
+      showToast("Settings saved successfully! ✨");
     } catch (error) {
-      showToast('Error saving settings');
+      console.error("❌ Error saving settings:", error);
+
+      showToast(
+        `Error saving settings: ${error.message || "Please try again."}`
+      );
     }
   }
 
@@ -321,7 +512,6 @@ function App({ user, onLogout }) {
     }
   }
 
-  // 👇 Theme effect
   useEffect(() => {
     document.documentElement.classList.toggle(
       "dark",
@@ -329,7 +519,6 @@ function App({ user, onLogout }) {
     );
   }, [settings.theme]);
 
-  // 👇 Default view effect - applies only when settings change
   useEffect(() => {
     if (!settings.default_view) return;
 
@@ -352,7 +541,6 @@ function App({ user, onLogout }) {
     }
   }, [settings.default_view]);
 
-  // Handle status change for Kanban with API persistence & state sync
   const handleStatusChange = async (taskId, newStatus) => {
     try {
       const validStatuses = ['To Do', 'In Progress', 'In Review', 'Completed'];
@@ -370,18 +558,15 @@ function App({ user, onLogout }) {
       if (selectedProjectId) {
         await loadTasks(selectedProjectId);
       }
-      const [statsData, allProjects] = await Promise.all([
-        api('/stats'),
-        api('/projects'),
-      ]);
-      setStats(statsData);
+      await loadStats();
+      const allProjects = await api('/projects');
       setProjects(allProjects);
       if (activeUserId) await loadNotifications(activeUserId);
       await loadActivities();
     } catch (error) {
       console.error('Error moving task:', error);
       showToast('Error moving task: ' + (error.message || 'Please try again.'));
-      throw error; // Re-throw to allow component rollback
+      throw error;
     }
   };
 
@@ -453,11 +638,10 @@ function App({ user, onLogout }) {
       });
       showToast('Task assigned successfully! 🎉');
       closeAllDialogs();
-      await loadTasks(projectId); // FIXED: Changed from selectedProjectId to projectId
+      await loadTasks(projectId);
       if (activeUserId) await loadNotifications(activeUserId);
       await loadActivities();
-      const statsData = await api('/stats');
-      setStats(statsData);
+      await loadStats();
     } catch (error) {
       showToast('Error creating task: ' + error.message);
     }
@@ -479,7 +663,8 @@ function App({ user, onLogout }) {
         initials: name.substring(0, 2).toUpperCase(),
         department: name,
         color: departmentColors[name] || '#6B7280',
-        emoji: departmentEmojis[name] || '🏢'
+        emoji: departmentEmojis[name] || '🏢',
+        workspace_id: Number(activeWorkspaceId),
       };
 
       await api('/users', {
@@ -512,6 +697,7 @@ function App({ user, onLogout }) {
     }
   }
 
+  // ========== FIXED: handleAddMember with workspace_id ==========
   async function handleAddMember(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -520,7 +706,7 @@ function App({ user, onLogout }) {
     const initials = form.get('initials')?.toString().trim().toUpperCase() || (name ? name.substring(0, 2).toUpperCase() : 'U');
     const color = form.get('color') || '#6366F1';
     const emoji = form.get('emoji') || '👤';
-    const email = form.get('email')?.toString().trim(); // Get email from form
+    const email = form.get('email')?.toString().trim();
 
     if (!name) {
       showToast('Please enter a member name');
@@ -544,7 +730,8 @@ function App({ user, onLogout }) {
         department: department,
         color: color,
         emoji: emoji,
-        email: email // Include email in the request
+        email: email,
+        workspace_id: Number(activeWorkspaceId),
       };
 
       await api('/users', {
@@ -554,7 +741,7 @@ function App({ user, onLogout }) {
 
       showToast(`Member "${name}" added successfully! 🎉`);
       closeAllDialogs();
-      setNewMemberEmail(''); // Reset email field after successful creation
+      setNewMemberEmail('');
       await loadAll();
     } catch (error) {
       showToast('Error adding member: ' + error.message);
@@ -575,52 +762,138 @@ function App({ user, onLogout }) {
     }
   }
 
+  // ========== FIXED: addComment() ==========
   async function addComment(event) {
     event.preventDefault();
-    if (!dialogState.payload || dialogState.type !== 'task') return;
-    const form = new FormData(event.currentTarget);
-    const author = form.get('author')?.toString().trim() || activeUser?.name || 'Anonymous';
-    const content = form.get('content')?.toString().trim();
-    if (!content) {
-      showToast('Please enter a comment');
+
+    if (!dialogState.payload || dialogState.type !== "task") {
       return;
     }
+
+    const form = new FormData(event.currentTarget);
+
+    const content = form.get("content")?.toString().trim();
+
+    const author =
+      activeUser?.name ||
+      user?.displayName ||
+      user?.email?.split("@")[0] ||
+      "Anonymous";
+
+    if (!content) {
+      showToast("Please enter a comment");
+      return;
+    }
+
     try {
-      await api(`/tasks/${dialogState.payload.id}/comments`, {
-        method: 'POST',
-        body: JSON.stringify({ author_name: author, content, user_id: activeUserId }),
-      });
+      showToast("Sending comment... 💬");
+
+      const result = await api(
+        `/tasks/${dialogState.payload.id}/comments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            author_name: author,
+            content: content,
+            user_id: activeUserId || null,
+          }),
+        }
+      );
+
+      console.log("✅ Comment response:", result);
+
       event.currentTarget.reset();
-      showToast('Comment added! 💬');
-      await openTask(dialogState.payload.id);
-      if (activeUserId) await loadNotifications(activeUserId);
+
+      showToast("Comment sent successfully! ✅");
+
+      // Reload task so the new comment immediately appears
+      const updatedTask = await api(
+        `/tasks/${dialogState.payload.id}`
+      );
+
+      setDialogState({
+        type: "task",
+        payload: updatedTask,
+      });
+
+      if (activeUserId) {
+        await loadNotifications(activeUserId);
+      }
+
       await loadActivities();
+
     } catch (error) {
-      console.error('Error adding comment:', error);
-      showToast('Error adding comment');
+      console.error("❌ Error adding comment:", error);
+
+      showToast(
+        `Error sending comment: ${error.message || "Unknown error"}`
+      );
     }
   }
 
+  // ========== FIXED: uploadAttachment() ==========
   async function uploadAttachment(event) {
     event.preventDefault();
-    if (!dialogState.payload || dialogState.type !== 'task') return;
-    const fileInput = event.currentTarget.querySelector('input[name="file"]');
-    const file = fileInput?.files?.[0];
-    if (!file) {
-      showToast('Please select a file');
+
+    if (!dialogState.payload || dialogState.type !== "task") {
       return;
     }
-    const fd = new FormData();
-    fd.append('file', file);
+
+    const fileInput = event.currentTarget.querySelector(
+      'input[name="file"]'
+    );
+
+    const file = fileInput?.files?.[0];
+
+    if (!file) {
+      showToast("Please select a file");
+      return;
+    }
+
+    // 10 MB maximum
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("File too large. Maximum size is 10MB.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
     try {
-      await api(`/tasks/${dialogState.payload.id}/attachments`, { method: 'POST', body: fd });
+      showToast("Uploading file... 📤");
+
+      const result = await api(
+        `/tasks/${dialogState.payload.id}/attachments`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      console.log("✅ Attachment response:", result);
+
       event.currentTarget.reset();
-      showToast('Attachment uploaded! 📎');
-      await openTask(dialogState.payload.id);
+
+      showToast("File uploaded successfully! ✅");
+
+      // Reload task to display attachment immediately
+      const updatedTask = await api(
+        `/tasks/${dialogState.payload.id}`
+      );
+
+      setDialogState({
+        type: "task",
+        payload: updatedTask,
+      });
+
       await loadActivities();
+
     } catch (error) {
-      console.error('Error uploading attachment:', error);
-      showToast('Error uploading attachment');
+      console.error("❌ Error uploading attachment:", error);
+
+      showToast(
+        `Upload failed: ${error.message || "Unknown error"}`
+      );
     }
   }
 
@@ -662,8 +935,26 @@ function App({ user, onLogout }) {
           <div className="brand-word">QTO.SOL</div>
         </div>
 
+        {/* ========== ADDED: Workspace Selector ========== */}
         <div className="active-user-wrap">
-          <label className="field-label">👤 Active Workspace User</label>
+          <label className="field-label">🏢 Workspace</label>
+          <select 
+            value={activeWorkspaceId ?? ''} 
+            onChange={(e) => {
+               const value = e.target.value;
+               setActiveWorkspaceId(value ? Number(value) : null);
+             }}
+          >
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="active-user-wrap">
+          <label className="field-label">👤 Active User</label>
           <select value={activeUserId ?? ''} onChange={(e) => setActiveUserId(Number(e.target.value))}>
             {users.map((u) => <option key={u.id} value={u.id}>{u.emoji || '👤'} {u.name}</option>)}
           </select>
@@ -691,8 +982,6 @@ function App({ user, onLogout }) {
         <button className="secondary-btn" onClick={onLogout} style={{ marginTop: 'auto', width: '100%', justifyContent: 'center' }}>
           🚪 Sign Out
         </button>
-
-        
       </aside>
 
       {/* Main Workspace Area */}
@@ -703,7 +992,7 @@ function App({ user, onLogout }) {
             <div className="topbar">
               <div>
                 <h1>📊 Executive Dashboard</h1>
-                <p>Real-time metrics and project breakdown</p>
+                <p>Real-time metrics and project breakdown for {workspaces.find(w => w.id === activeWorkspaceId)?.name || 'workspace'}</p>
               </div>
               <div className="topbar-actions">
                 <button className="primary-btn assign-btn" onClick={openAssignTask}>
@@ -723,23 +1012,43 @@ function App({ user, onLogout }) {
               <StatCard icon="✅" label="Completed" value={stats.completed} accent="done" />
             </div>
 
+            {/* ========== MODIFIED: Workspace cards instead of project cards ========== */}
             <div className="department-grid">
-              {projects.map((project) => {
-                const completePct = project.task_count ? Math.round((project.completed_count / project.task_count) * 100) : 0;
+              {workspaces.map((workspace) => {
+                const workspaceProjects = projects.filter(p => p.workspace_id === workspace.id);
+                const totalTasks = workspaceProjects.reduce((sum, p) => sum + (p.task_count || 0), 0);
+                const completedTasks = workspaceProjects.reduce((sum, p) => sum + (p.completed_count || 0), 0);
+                const completePct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
                 return (
-                  <article key={project.id} className="department-card glass-card" style={{ cursor: 'pointer' }} onClick={() => { setSelectedProjectId(project.id); setActiveView('project'); }}>
+                  <article 
+                    key={workspace.id} 
+                    className={`department-card glass-card ${activeWorkspaceId === workspace.id ? 'active-workspace' : ''}`}
+                    style={{ 
+                      cursor: 'pointer',
+                      border: activeWorkspaceId === workspace.id ? '2px solid var(--accent-primary)' : 'none',
+                      transform: activeWorkspaceId === workspace.id ? 'scale(1.02)' : 'scale(1)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => setActiveWorkspaceId(workspace.id)}
+                  >
                     <div className="department-header">
                       <div className="department-icon" style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
-                        📋
+                        🏢
                       </div>
                       <div className="department-info">
-                        <h3>{project.name}</h3>
-                        <span className="department-meta">{project.completed_count} of {project.task_count} tasks completed</span>
+                        <h3>{workspace.name}</h3>
+                        <span className="department-meta">
+                          {workspaceProjects.length} projects • {totalTasks} tasks
+                        </span>
                       </div>
+                      {activeWorkspaceId === workspace.id && (
+                        <span className="badge badge-high">Active</span>
+                      )}
                     </div>
 
                     <p style={{ fontSize: '13px', color: 'var(--ink-secondary)', margin: '4px 0 10px 0' }}>
-                      {project.description || 'No description provided.'}
+                      {workspace.description || 'No description provided.'}
                     </p>
 
                     <div className="department-progress">
@@ -788,7 +1097,23 @@ function App({ user, onLogout }) {
               </div>
             </div>
 
+            {/* ========== ADDED: Project selector for current workspace ========== */}
             <div className="filter-row">
+              <select 
+                value={selectedProjectId ?? ''} 
+                onChange={(e) => {
+                 const value = e.target.value;
+                 setSelectedProjectId(value ? Number(value) : null);
+               }}
+                style={{ minWidth: '200px' }}
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                {projects.length === 0 && (
+                  <option value="">No projects in this workspace</option>
+                )}
+              </select>
               <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
                 <option value="">👤 All Assignees</option>
                 {users.map((userItem) => <option key={userItem.id} value={userItem.id}>{userItem.emoji || '👤'} {userItem.name}</option>)}
@@ -1086,7 +1411,57 @@ function App({ user, onLogout }) {
                 <p>Preferences and system configuration</p>
               </div>
             </div>
-            <form className="dialog-card glass-card" style={{ maxWidth: '600px', margin: '0' }} onSubmit={(e) => { e.preventDefault(); saveSettings({ workspace_name: settings.workspace_name, default_view: settings.default_view, theme: settings.theme }); }}>
+
+            {/* ========== ADDED: Create Workspace Section ========== */}
+            <div className="dialog-card glass-card" style={{ maxWidth: '600px', margin: '0 0 24px 0' }}>
+              <h3 style={{ margin: '0 0 12px 0' }}>🏢 Create New Workspace</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = new FormData(e.currentTarget);
+                const name = form.get('workspace_name')?.toString().trim();
+                const description = form.get('workspace_description')?.toString().trim() || '';
+                
+                if (!name) {
+                  showToast('Please enter a workspace name');
+                  return;
+                }
+
+                try {
+                  await createWorkspace(name, description);
+                  e.currentTarget.reset();
+                  setActiveView('dashboard');
+                } catch (error) {
+                  // Error handled in createWorkspace
+                }
+              }}>
+                <div className="form-group">
+                  <label>Workspace Name *</label>
+                  <input 
+                    name="workspace_name" 
+                    placeholder="e.g. Marketing, Development" 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <input 
+                    name="workspace_description" 
+                    placeholder="Brief description of this workspace" 
+                  />
+                </div>
+                <button className="primary-btn assign-btn" type="submit" style={{ width: 'fit-content' }}>
+                  ➕ Create Workspace
+                </button>
+              </form>
+            </div>
+
+            {/* ========== MODIFIED: Settings form ========== */}
+            <form className="dialog-card glass-card" style={{ maxWidth: '600px', margin: '0' }} onSubmit={(e) => { e.preventDefault(); saveSettings({
+                   workspace_name: settings.workspace_name || 'TaskFlow',
+                   default_view: settings.default_view || 'board',
+                   theme: settings.theme || 'light',
+                 }); }}>
+              <h3 style={{ margin: '0 0 12px 0' }}>⚙️ Workspace Preferences</h3>
               <div className="form-group">
                 <label>Workspace Name</label>
                 <input value={settings.workspace_name} onChange={(e) => setSettings({ ...settings, workspace_name: e.target.value })} />
@@ -1319,9 +1694,36 @@ function App({ user, onLogout }) {
                 )}
               </div>
 
-              <form onSubmit={addComment} style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <input name="content" placeholder="Write a comment..." required style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)' }} />
-                <button type="submit" className="primary-btn" style={{ padding: '8px 16px' }}>Comment</button>
+              {/* ========== FIXED: Comment form ========== */}
+              <form
+                onSubmit={addComment}
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  marginTop: "8px"
+                }}
+              >
+                <input
+                  name="content"
+                  type="text"
+                  placeholder="Write a comment..."
+                  required
+                  autoComplete="off"
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    border: "1px solid var(--border-light)",
+                    borderRadius: "var(--radius-md)"
+                  }}
+                />
+
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{ padding: "8px 16px" }}
+                >
+                  💬 Send
+                </button>
               </form>
             </div>
 
@@ -1331,7 +1733,19 @@ function App({ user, onLogout }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {dialogState.payload.attachments?.map((attachment) => (
                   <div key={attachment.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                    <a href={`${API_URL}/api/attachments/${attachment.id}/download`} target="_blank" rel="noreferrer" download style={{ color: 'var(--accent-primary)', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}>
+                    {/* ========== FIXED: Attachment download URL ========== */}
+                    <a
+                      href={`${API_URL}/attachments/${attachment.id}/download`}
+                      target="_blank"
+                      rel="noreferrer"
+                      download
+                      style={{
+                        color: "var(--accent-primary)",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        textDecoration: "none"
+                      }}
+                    >
                       📄 {attachment.filename}
                     </a>
                     <button type="button" className="icon-btn danger" onClick={() => deleteAttachment(attachment.id)}>✕</button>
